@@ -4,26 +4,25 @@ const path = require("path");
 const OpenAI = require("openai");
 const { Readable } = require('stream');
 const { finished } = require('stream/promises');
-
-const GOOGLE_API_ENDPOINT = "https://texttospeech.googleapis.com";
-const GOOGLE_API_KEY = "AIzaSyA3TmZcHhvY40g8eitQKPJQRyGTMT9VL5w";
-const OPENAI_API_KEY = "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";
+const { DateUtil } = require('./utils');
+const { GOOGLE_API, OPENAI_API } = require('./const');
 
 const app = express();
+
 const openai = new OpenAI({
-  apiKey: OPENAI_API_KEY
+  apiKey: OPENAI_API.KEY
 })
 
 app.use(express.json({ limit: "50mb"}));  // JSON 본문 크기 제한 증가
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 async function generateVoiceSynthesisMP3File(basePath, text) {
-  const url = path.join(GOOGLE_API_ENDPOINT, "/v1beta1/text:synthesize");
+  const url = path.join(GOOGLE_API.ENDPOINT, "/v1beta1/text:synthesize");
 
   const data = await fetch(url, {
     method: "POST",
     headers: {
-      "X-goog-api-key": GOOGLE_API_KEY
+      "X-goog-api-key": GOOGLE_API.KEY
     },
     body: JSON.stringify({
       /* Input (Required)
@@ -125,32 +124,15 @@ async function generateImage(basePath, i, text) {
   return imagePath;
 }
 
-function getTodayKSTString() {
-  const today = new Date(Date.now() + (9 * 60 * 60 * 1000));
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-function getCurrentKSTTime() {
-  const today = new Date(Date.now() + (9 * 60 * 60 * 1000));
-  const hour = String(today.getHours()).padStart(2, '0');
-  const minute = String(today.getMinutes()).padStart(2, '0');
-  const second = String(today.getSeconds()).padStart(2, '0');
-
-  return `${hour}h${minute}m${second}s`;
-}
 
 app.post("/", async (req, res) => {
   // 오늘자 폴더가 생성되어 있는지 확인
-  const todayPath = path.join("contents", getTodayKSTString());
+  const todayPath = path.join("contents", DateUtil.getTodayKSTString());
   if (!fs.existsSync(todayPath)) fs.mkdirSync(todayPath);
 
   // 요청당 "HH-MM-DD" 이름의 폴더가 생성됨
   // 해당 폴더 내부에는 voice.mp3, image-${i}.png 파일 및 최종 숏츠 영상이 저장됨.
-  const basePath = path.join(todayPath, getCurrentKSTTime());
+  const basePath = path.join(todayPath, DateUtil.getCurrentKSTTime());
   if (!fs.existsSync(basePath)) fs.mkdirSync(basePath);
 
   const { inputText } = req.body;
