@@ -1,12 +1,15 @@
-const ffmpeg = require("fluent-ffmpeg");
 const videoshow = require("videoshow");
+const path = require("path");
+const { exec } = require("child_process");
 
 class FFmpeg {
+  static FFMPEG = path.resolve(process.cwd(), "ffmpeg", "bin", "ffmpeg.exe");
+
   static videoOptions = {
     fps: 30,
-    loop: 3,   // seconds
+    loop: 5,   // seconds
     transition: true,
-    transitionDuration: 1,  // seconds
+    transitionDuration: 0.5,  // seconds
     videoBitrate: 1024,
     videoCodec: 'libx264',
     audioBitrate: '128k',
@@ -15,25 +18,19 @@ class FFmpeg {
     pixelFormat: 'yuv420p'
   }
 
-  static mergeAudioStreams(outputPath, ...inputPaths) {
-    const cmd = ffmpeg();
+  static mergeAudioStreams(outputPath, voicePath, bgmPath) {
+    const cmd = `${this.FFMPEG} -i ${voicePath} -i ${bgmPath} -filter_complex "[0:a]volume=1.5[a1];[1:a]volume=0.8[a2];[a1][a2]amix=inputs=2:duration=shortest[a]" -map "[a]" ${outputPath}`
+    console.log(cmd);
 
-    // select audio from each input
-    inputPaths.forEach((path, index) => cmd.input(path));
-
-    cmd
-      .complexFilter([
-        {
-          filter: 'amix',
-          options: { inputs: 2, duration: 'shortest' },
-          outputs: 'mixed'
-        }
-      ])
-      .outputOptions('-map [mixed]')
-      .output(outputPath)
-      .on('end', () => console.log('Audio Mixing Completed\n'))
-      .on('error', (err) => console.error(`Audio Mixing Error: ${err}\n`))
-      .run()
+    // FFmpeg 프로세스 실행
+    exec(cmd, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error mixing audio: ${error.message}`);
+        console.error(`ffmpeg stderr: ${stderr}`);
+        return;
+      }
+      console.log('Audio Mixing Completed Successfully', stdout);
+    });
   }
 
   static async run(imagePaths, mixedAudioPath, destinationPath) {

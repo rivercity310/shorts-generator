@@ -12,13 +12,6 @@ const FFMpeg = require("./FFmpeg");
 const { DateUtil, TextUtil } = require('./utils');
 const { GOOGLE_API, OPENAI_API } = require('./const');
 
-// FFmpeg Libs
-const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
-const ffprobePath = require("@ffprobe-installer/ffprobe").path;
-const ffmpeg = require("fluent-ffmpeg");
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath);
-
 // Third party Libs
 const OpenAI = require("openai");
 const openai = new OpenAI({ apiKey: OPENAI_API.KEY })
@@ -68,12 +61,13 @@ async function generateVoiceSynthesisMP3File(basePath, text) {
       /* AudioConfig (Required)
        * - The configuration of the synthesized audio.
        */
-      audioConfig: {
-        audioEncoding: "mp3",  /* The format of the audio byte stream (ENUM) */
-        speakingRate: 1,       /* Speaking rate/speed in the range [0.25, 4.0]. 1.0 is the normal native speed */
-        pitch: 5,             /* Speaking pitch in the range [-20.0, 20.0]. 0 is the normal native pitch */
-        volumeGainDb: 16,      /* Volume in the range [-96.0, 16.0]. 0 is normal volume */
-        sampleRateHertz: 12000
+       audioConfig: {
+          audioEncoding: "mp3",
+          effectsProfileId: [
+            "handset-class-device"
+          ],
+          pitch: 0,
+          speakingRate: 1.15
       },
       /*
       enableTimePointing: {
@@ -150,37 +144,38 @@ app.post("/", async (req, res) => {
 
   const { inputText } = req.body;
   const filteredText = TextUtil.filterText(inputText);
+  const voicePath = "contents/2025-02-26/18h37m54s/voice.mp3" // await generateVoiceSynthesisMP3File(basePath, filteredText);
+  const mixedAudioPath = path.join(basePath, 'mixed-audio.mp3');
+  const bgmPath = path.join(CWD, "bgm", "bgm.mp3");
 
   console.log(`[Filtering text]\n${filteredText}\n\n`);
 
+  // FFmpeg을 이용해서 이미지와 배경음악, 내레이션을 합성 -> mp4 영상 파일 생성
   try {
-    // FFmpeg을 이용해서 이미지와 배경음악, 내레이션을 합성 -> mp4 영상 파일 생성
-    const voicePath = await generateVoiceSynthesisMP3File(basePath, filteredText);
-    const bgmPath = path.join(CWD, "bgm", "bgm.mp3");
-    const mixedAudioPath = path.join(basePath, 'mixed-audio.mp3');
-
-    // 2. 내레이션과 bgm 두 오디오 파일 합성하기
+    // 1. 내레이션과 bgm 두 오디오 파일 합성하기
     FFMpeg.mergeAudioStreams(mixedAudioPath, voicePath, bgmPath);
 
-    // 3. 이미지 생성
+    // 2. 이미지 생성
     const inputTextList = TextUtil.toStringArray(filteredText);
-    const imageListPath = [];
+
+    // 개발중 임시 이미지 사용 경로
+    const imageListPath = ["contents/2025-02-26/18h37m54s/test-0.png", "contents/2025-02-26/18h37m54s/test-1.png", "contents/2025-02-26/18h37m54s/test-2.png"];
+    /*
     for (let i = 0; i < inputTextList.length; i++) {
-      console.log(`[try to generate image]\n${inputTextList[i]}\n`);
+      console.log(`[generating image...]\n${inputTextList[i]}\n`);
       const imagePath = await generateAnimationImage(basePath, i, inputTextList[i]);
       if (imagePath) imageListPath.push(imagePath);
     }
+     */
 
-    // 4. 비디오와 믹싱된 오디오 합성하기
-    const outputVideoPath = path.join(basePath, "output.mp4");
+    // 3. 비디오와 믹싱된 오디오 합성하기
+    const outputVideoPath = path.join(CWD, "outputs", `${DateUtil.getTodayKSTString()}_${DateUtil.getCurrentKSTTime()}.mp4`);
     await FFMpeg.run(imageListPath, mixedAudioPath, outputVideoPath);
 
     return res.status(200).end();
   } catch (err) {
     console.error(err);
     return res.status(500).send('Internal Server Error'); // 오류가 발생하면 500 응답 전송
-  } finally {
-    // 임시파일 삭제
   }
 })
 
