@@ -6,11 +6,16 @@
     "dev": "node src/app.js"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
+    "dotenv": "^16.4.7",
     "express": "5.0.0",
+    "fluent-ffmpeg": "^2.1.3",
     "http-errors": "~1.6.3",
     "morgan": "~1.9.1",
-    "openai": "^4.85.4"
+    "openai": "^4.85.4",
+    "videoshow": "^0.1.12"
   }
 }

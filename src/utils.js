@@ -1,6 +1,6 @@
 class DateUtil {
   static getTodayKSTString() {
-    const today = new Date(Date.now() + (9 * 60 * 60 * 1000));
+    const today = new Date(Date.now());
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
@@ -9,7 +9,7 @@ class DateUtil {
   }
 
   static getCurrentKSTTime() {
-    const today = new Date(Date.now() + (9 * 60 * 60 * 1000));
+    const today = new Date(Date.now());
     const hour = String(today.getHours()).padStart(2, '0');
     const minute = String(today.getMinutes()).padStart(2, '0');
     const second = String(today.getSeconds()).padStart(2, '0');
@@ -18,4 +18,6 @@ class DateUtil {
   }
 }
 
-module.exports = DateUtil;
+module.exports = {
+  DateUtil
+};
