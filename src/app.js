@@ -8,8 +8,8 @@ const { Readable } = require('stream');
 const { finished } = require('stream/promises');
 
 // Custom Libs
-const VideoCreator = require("./VideoCreator");
-const { DateUtil } = require('./utils');
+const FFMpeg = require("./FFmpeg");
+const { DateUtil, TextUtil } = require('./utils');
 const { GOOGLE_API, OPENAI_API } = require('./const');
 
 // FFmpeg Libs
@@ -72,7 +72,7 @@ async function generateVoiceSynthesisMP3File(basePath, text) {
         audioEncoding: "mp3",  /* The format of the audio byte stream (ENUM) */
         speakingRate: 1,       /* Speaking rate/speed in the range [0.25, 4.0]. 1.0 is the normal native speed */
         pitch: 5,             /* Speaking pitch in the range [-20.0, 20.0]. 0 is the normal native pitch */
-        volumeGainDb: 10,      /* Volume in the range [-96.0, 16.0]. 0 is normal volume */
+        volumeGainDb: 16,      /* Volume in the range [-96.0, 16.0]. 0 is normal volume */
         sampleRateHertz: 12000
       },
       /*
@@ -105,25 +105,23 @@ async function generateVoiceSynthesisMP3File(basePath, text) {
 }
 
 async function generateAnimationImage(basePath, i, text) {
+  const imagePath = path.join(basePath, `test-${i}.png`);
   const prompt = `
-    1. 아래 주어진 텍스트를 읽고 키워드를 파악해서 관련된 이미지를 애니메이션 느낌으로 생성해주세요.
-    2. 만약 생성된 이미지가 텍스트를 포함한다면 전부 한국어로 작성해주세요.
+    '---' 아래 주어진 텍스트를 읽고 핵심 키워드를 파악해서 관련된 이미지를 생성해주세요.
     ---
     "${text}"
   `
-
-  const res = await openai.images.generate({
-    model: "dall-e-3",
-    prompt: prompt,
-    n: 1,
-    size: "1024x1024"
-  });
-
-  const url = res.data[0].url;
-  const imagePath = path.join(basePath, `test-${i}.png`);
-
-  // 생성된 이미지 저장하기
   try {
+    const res = await openai.images.generate({
+      model: "dall-e-3",
+      prompt: prompt,
+      n: 1,
+      size: "1024x1024"
+    });
+
+    const url = res.data[0].url;
+
+   // 생성된 이미지 저장하기
     const imageRes = await fetch(url);
     const fileStream = fs.createWriteStream(imagePath, { flags: 'wx' });
     await finished(Readable.fromWeb(imageRes.body).pipe(fileStream));
@@ -139,82 +137,51 @@ app.post("/", async (req, res) => {
   // 오늘자 폴더가 생성되어 있는지 확인
   const CWD = process.cwd();
   const todayPath = path.join("contents", DateUtil.getTodayKSTString());
-  if (!fs.existsSync(todayPath)) fs.mkdirSync(todayPath);
+  if (!fs.existsSync(todayPath)) {
+    fs.mkdirSync(todayPath);
+  }
 
   // 요청당 "HH-MM-DD" 이름의 폴더가 생성됨
   // 해당 폴더 내부에는 voice.mp3, image-${i}.png 파일 및 최종 숏츠 영상이 저장됨.
-  const basePath = path.join(CWD, "contents", "2025-02-26", "14h20m38s")// path.join(todayPath, DateUtil.getCurrentKSTTime());
-  if (!fs.existsSync(basePath)) fs.mkdirSync(basePath);
+  const basePath = path.join(todayPath, DateUtil.getCurrentKSTTime());
+  if (!fs.existsSync(basePath)) {
+    fs.mkdirSync(basePath);
+  }
 
   const { inputText } = req.body;
-  const imageListPath = [];
+  const filteredText = TextUtil.filterText(inputText);
 
-  // FFmpeg을 이용해서 이미지와 배경음악, 내레이션을 합성 -> mp4 영상 파일 생성
-  // 0. 경로 정의
-  // const narrationPath = await generateVoiceSynthesisMP3File(basePath, inputText);
-  // const imagePath = await generateAnimationImage(basePath, 0, inputText);
-  const narrationPath = path.join(basePath, "voice.mp3");
-  const imagePath = path.join(basePath, "test-0.png");
-  const bgmPath = path.join(CWD, "bgm", "bgm.mp3");
-  const outputVideoPath = path.join(basePath, "output.mp4");
-  const slideshowVideoPath = path.join(basePath, 'slideshow.mp4');
-  const mixedAudioPath = path.join(basePath, 'mixed-audio.mp3');
-  imageListPath.push(imagePath);
-  imageListPath.push(path.join(basePath, "test-1.png"));
+  console.log(`[Filtering text]\n${filteredText}\n\n`);
 
-  VideoCreator.run(imageListPath, bgmPath, narrationPath, outputVideoPath);
+  try {
+    // FFmpeg을 이용해서 이미지와 배경음악, 내레이션을 합성 -> mp4 영상 파일 생성
+    const voicePath = await generateVoiceSynthesisMP3File(basePath, filteredText);
+    const bgmPath = path.join(CWD, "bgm", "bgm.mp3");
+    const mixedAudioPath = path.join(basePath, 'mixed-audio.mp3');
 
-  /*
-  // 1. 이미지 리스트 -> 슬라이드쇼 영상 변환
-  await new Promise((resolve, reject) => {
-    const slideshow = ffmpeg();
-    imageListPath.forEach(imagePath => slideshow.input(imagePath));
+    // 2. 내레이션과 bgm 두 오디오 파일 합성하기
+    FFMpeg.mergeAudioStreams(mixedAudioPath, voicePath, bgmPath);
 
-    slideshow
-      .inputOptions('-framerate 3')  // 각 이미지당 1초
-      .outputOptions('-pix_fmt yuv420p')  // 호환성 높은 포맷
-      .output(slideshowVideoPath)
-      .on('end', resolve)
-      .on('error', reject)
-      .run();
-  });
+    // 3. 이미지 생성
+    const inputTextList = TextUtil.toStringArray(filteredText);
+    const imageListPath = [];
+    for (let i = 0; i < inputTextList.length; i++) {
+      console.log(`[try to generate image]\n${inputTextList[i]}\n`);
+      const imagePath = await generateAnimationImage(basePath, i, inputTextList[i]);
+      if (imagePath) imageListPath.push(imagePath);
+    }
 
-  // 2. 내레이션 mp3 파일과 bgm mp3 파일 믹싱
-  await new Promise((resolve, reject) => {
-    ffmpeg()
-      .input(narrationPath)
-      .input(bgmPath)
-      .complexFilter([
-        '[0:a]volume=1[a1];',   // 내레이션 볼륨 유지
-        '[1:a]volume=0.3[a2];', // 배경음악 볼륨 낮춤
-        '[a1][a2]amix=inputs=2:duration=longest:dropout_transition=3[mixed]' // 믹싱 결과를 [mixed]로 명시
-      ])
-      .outputOptions('-map [mixed]') // 최종 믹싱된 오디오를 출력으로 지정
-      .outputOptions('-c:a aac', '-b:a 192k')  // 오디오 코덱과 비트레이트 설정
-      .output(mixedAudioPath)
-      .on('end', resolve)
-      .on('error', (err, stdout, stderr) => {
-        console.log(`FFmpeg Error: ${err}`);
-        console.log(`FFmpeg stderr: ${stderr}`);
-        reject(err);
-      })
-      .run();
-  });
+    // 4. 비디오와 믹싱된 오디오 합성하기
+    const outputVideoPath = path.join(basePath, "output.mp4");
+    await FFMpeg.run(imageListPath, mixedAudioPath, outputVideoPath);
 
-  // 3. 영상 + 오디오 믹싱
-  await new Promise((resolve, reject) => {
-    ffmpeg()
-      .input(slideshowVideoPath)
-      .input(mixedAudioPath)
-      .outputOptions('-c:v copy', '-c:a aac', '-shortest')  // 오디오 길이에 맞춰 영상 조정
-      .output(outputVideoPath)
-      .on('end', resolve)
-      .on('error', reject)
-      .run();
-  });
-  */
-
-  return res.status(200).end();
+    return res.status(200).end();
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Internal Server Error'); // 오류가 발생하면 500 응답 전송
+  } finally {
+    // 임시파일 삭제
+  }
 })
 
 app.listen(8000, () => {

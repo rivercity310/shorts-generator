@@ -18,6 +18,33 @@ class DateUtil {
   }
 }
 
+class TextUtil {
+  static FILTERING = [
+    'ㄱ', 'ㄴ', 'ㄷ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅅ',
+    'ㅇ', 'ㅈ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ',
+    'ㅏ', 'ㅑ', 'ㅓ', 'ㅕ', 'ㅜ', 'ㅠ', 'ㅡ', 'ㅣ',
+    '~', '!', '@', '`', '#', '$', '%', '^', '&', '*', '(', ')', '-', '='
+  ]
+
+  static escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // 정규 표현식 특수 문자 이스케이프
+  }
+
+  static filterText(text) {
+    for (const f of this.FILTERING) {
+      const escapedChar = this.escapeRegExp(f); // 특수 문자 이스케이프
+      text = text.replace(new RegExp(escapedChar, 'g'), '');
+    }
+
+    return text.trim();
+  }
+
+  static toStringArray(text) {
+    return text.split('\n').map(text => text.trim());
+  }
+}
+
 module.exports = {
-  DateUtil
+  DateUtil,
+  TextUtil
 };
