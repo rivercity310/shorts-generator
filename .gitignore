@@ -1,7 +1,7 @@
 node_modules
 contents
-bgm
-outputs
+bgm/*.mp3
+outputs/*.mp4
 ffmpeg
 .idea
 .env
