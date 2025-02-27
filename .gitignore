@@ -2,5 +2,8 @@ node_modules
 contents
 bgm
 outputs
+ffmpeg
 .idea
 .env
+**/*.ass
+**/*.srt
